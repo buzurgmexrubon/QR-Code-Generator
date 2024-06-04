@@ -1,0 +1,72 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9  # Adjust if your bot uses a different Python version
+    - name: Install dependencies
+      run: |
+        python -m pip install -r requirements.txt  # Replace if you use Pipfile.lock
+    - name: Build (optional)  # Run tests or build steps specific to your bot
+      run: |  # Replace with your bot build commands
+        python main.py  # Example build command, adjust as needed
+      # python build.py  # Example build command, adjust as needed
+        
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9  # Adjust if your bot uses a different Python version
+    - name: Install dependencies
+      run: |
+        python -m pip install -r requirements.txt  # Replace if you use Pipfile.lock
+    - name: Test (optional)  # Run unit tests for your bot
+      run: |  # Replace with your bot test commands
+        python tests.py  # Example test command, adjust as needed
+        
+  dockerize:
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Build Docker Image
+        run: docker build -t $DOCKER_USERNAME/qr-code-telegram-bot .  # Replace with your image name
+      - name: Login to Docker Hub
+        run: |
+          docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      - name: Push Docker image to Docker Hub (optional)
+        run: docker push $DOCKER_USERNAME/qr-code-telegram-bot  # Comment out if not pushing to Hub
+        
+  deploy:
+    runs-on: ubuntu-latest
+    needs: dockerize  
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          key: ${{ secrets.SERVER_KEY }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          script: |
+            cd /home/ubuntu/qr-code-telegram-bot  # Replace with your bot directory on EC2
+            docker-compose up -d --no-deps --build  # Start the container (adjust as needed)
+
